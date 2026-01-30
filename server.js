@@ -28,6 +28,14 @@ async function sendWhatsAppText({ to, body }) {
   if (!META_PHONE_NUMBER_ID) throw new Error("Missing META_PHONE_NUMBER_ID");
   if (!META_ACCESS_TOKEN) throw new Error("Missing META_ACCESS_TOKEN");
 
+  function isAdmin(waId) {
+    const list = (process.env.ADMIN_WA_IDS || "")
+      .split(",")
+      .map(s => s.trim())
+      .filter(Boolean);
+    return list.length === 0 ? true : list.includes(waId);
+  }
+
   const url = `https://graph.facebook.com/v18.0/${META_PHONE_NUMBER_ID}/messages`;
 
   const resp = await fetch(url, {
@@ -95,11 +103,42 @@ app.post("/meta/whatsapp", express.raw({ type: "*/*" }), async (req, res) => {
     const msgId = msg?.id || "";
     console.log("Inbound message:", { waId, textBody, msgId });
 
-    // ✅ Temporary: always reply so you can confirm outbound works
-    await sendWhatsAppText({
-      to: waId,
-      body: `✅ Got it: "${textBody}"`,
+    const cmd = textBody.trim().toLowerCase();
+
+// Lock it down (optional but recommended)
+if (!isAdmin(waId)) {
+  await sendWhatsAppText({
+    to: waId,
+    body: "⛔ Not authorized.",
+  });
+  return res.sendStatus(200);
+}
+
+if (cmd === "ping") {
+  // Optional: check Moltbot private service is reachable
+  let moltbotOk = "unknown";
+  try {
+    const r = await fetch(`${process.env.MOLTBOT_INTERNAL_URL || "http://moltbot.railway.internal:8080"}/`, {
+      method: "GET",
     });
+    moltbotOk = r.ok ? "ok" : `http_${r.status}`;
+  } catch {
+    moltbotOk = "unreachable";
+  }
+
+  await sendWhatsAppText({
+    to: waId,
+    body: `🏓 Pong!\nWebhook: ok\nMoltbot: ${moltbotOk}`,
+  });
+  return res.sendStatus(200);
+}
+
+// default behavior for other messages (for now)
+await sendWhatsAppText({
+  to: waId,
+  body: `✅ Received: "${textBody}"\nTry: ping`,
+});
+
 
     return res.sendStatus(200);
   } catch (e) {
