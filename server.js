@@ -54,6 +54,65 @@ async function sendWhatsAppText({ to, body }) {
 // Quick “is it live?” route
 app.get("/", (_req, res) => res.status(200).send("ok"));
 
+// Privacy Policy for Meta App approval
+app.get("/privacy", (_req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px 20px; line-height: 1.6; color: #333; }
+    h1 { color: #1a1a1a; }
+    h2 { color: #444; margin-top: 30px; }
+    p { margin: 15px 0; }
+    .updated { color: #666; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>Privacy Policy</h1>
+  <p class="updated">Last updated: January 2025</p>
+  
+  <h2>Introduction</h2>
+  <p>This Privacy Policy describes how we collect, use, and handle your information when you use our WhatsApp integration service.</p>
+  
+  <h2>Information We Collect</h2>
+  <p>When you interact with our service via WhatsApp, we may receive:</p>
+  <ul>
+    <li>Your WhatsApp phone number</li>
+    <li>Your WhatsApp display name</li>
+    <li>Message content you send to our service</li>
+  </ul>
+  
+  <h2>How We Use Your Information</h2>
+  <p>We use the information solely to:</p>
+  <ul>
+    <li>Process and respond to your messages</li>
+    <li>Provide the requested service functionality</li>
+  </ul>
+  
+  <h2>Data Storage and Security</h2>
+  <p>We process messages in real-time and do not permanently store message content. We implement appropriate security measures to protect any data in transit.</p>
+  
+  <h2>Third-Party Services</h2>
+  <p>Our service integrates with Meta's WhatsApp Business Platform. Your use is also subject to <a href="https://www.whatsapp.com/legal/privacy-policy">WhatsApp's Privacy Policy</a>.</p>
+  
+  <h2>Data Retention</h2>
+  <p>We do not retain personal message data beyond the immediate processing required to respond to your request.</p>
+  
+  <h2>Your Rights</h2>
+  <p>You may stop using our service at any time by ceasing to send messages. For questions about your data, contact us using the information below.</p>
+  
+  <h2>Contact Us</h2>
+  <p>If you have questions about this Privacy Policy, please contact us at the email associated with this service.</p>
+  
+  <h2>Changes to This Policy</h2>
+  <p>We may update this Privacy Policy from time to time. Continued use of the service after changes constitutes acceptance of the updated policy.</p>
+</body>
+</html>`);
+});
+
 // Meta verify handshake
 app.get("/meta/whatsapp", (req, res) => {
   const mode = req.query["hub.mode"];
@@ -141,3 +200,10 @@ app.post("/meta/whatsapp", express.raw({ type: "*/*" }), async (req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`whatsapp-webhook listening on ${PORT}`);
 });
+TOKEN="EAANHXuKOkssBQgbJJZCnCyvdNZCy5Wh0VcZBk7bFz3C5WNnDBQIvMN6ZA9H9yZAoUdhvyNmuflC98EZALRcvFZC3ZAZAhNBKAjegRm6acD23fZAsZBHEjiBTLk0xsLhi1DxqCPVlRiMSu9ZARgZA8uaV0nZAzFaykuq3oQy1b5l3otpCORsyVnFxV4IrV29QoFmFNe0DXLZAgZDZD"
+PHONE_NUMBER_ID="923795210823721"
+
+curl -sS -X POST "https://graph.facebook.com/v18.0/923795210823721/register" -H "Authorization: Bearer EAANHXuKOkssBQgbJJZCnCyvdNZCy5Wh0VcZBk7bFz3C5WNnDBQIvMN6ZA9H9yZAoUdhvyNmuflC98EZALRcvFZC3ZAZAhNBKAjegRm6acD23fZAsZBHEjiBTLk0xsLhi1DxqCPVlRiMSu9ZARgZA8uaV0nZAzFaykuq3oQy1b5l3otpCORsyVnFxV4IrV29QoFmFNe0DXLZAgZDZD" -H "Content-Type: application/json" -d '{"messaging_product":"whatsapp"}'
+
+
+curl -X POST https://graph.facebook.com/v18.0/985645401303079/register -H "Authorization: BearerEAANHXuKOkssBQgbJJZCnCyvdNZCy5Wh0VcZBk7bFz3C5WNnDBQIvMN6ZA9H9yZAoUdhvyNmuflC98EZALRcvFZC3ZAZAhNBKAjegRm6acD23fZAsZBHEjiBTLk0xsLhi1DxqCPVlRiMSu9ZARgZA8uaV0nZAzFaykuq3oQy1b5l3otpCORsyVnFxV4IrV29QoFmFNe0DXLZAgZDZD" -H "Content-Type: application/json" -d '{"messaging_product":"whatsapp","pin":"123456"}'
