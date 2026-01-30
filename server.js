@@ -200,10 +200,3 @@ app.post("/meta/whatsapp", express.raw({ type: "*/*" }), async (req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`whatsapp-webhook listening on ${PORT}`);
 });
-TOKEN="EAANHXuKOkssBQgbJJZCnCyvdNZCy5Wh0VcZBk7bFz3C5WNnDBQIvMN6ZA9H9yZAoUdhvyNmuflC98EZALRcvFZC3ZAZAhNBKAjegRm6acD23fZAsZBHEjiBTLk0xsLhi1DxqCPVlRiMSu9ZARgZA8uaV0nZAzFaykuq3oQy1b5l3otpCORsyVnFxV4IrV29QoFmFNe0DXLZAgZDZD"
-PHONE_NUMBER_ID="923795210823721"
-
-curl -sS -X POST "https://graph.facebook.com/v18.0/923795210823721/register" -H "Authorization: Bearer EAANHXuKOkssBQgbJJZCnCyvdNZCy5Wh0VcZBk7bFz3C5WNnDBQIvMN6ZA9H9yZAoUdhvyNmuflC98EZALRcvFZC3ZAZAhNBKAjegRm6acD23fZAsZBHEjiBTLk0xsLhi1DxqCPVlRiMSu9ZARgZA8uaV0nZAzFaykuq3oQy1b5l3otpCORsyVnFxV4IrV29QoFmFNe0DXLZAgZDZD" -H "Content-Type: application/json" -d '{"messaging_product":"whatsapp"}'
-
-
-curl -X POST https://graph.facebook.com/v18.0/985645401303079/register -H "Authorization: BearerEAANHXuKOkssBQgbJJZCnCyvdNZCy5Wh0VcZBk7bFz3C5WNnDBQIvMN6ZA9H9yZAoUdhvyNmuflC98EZALRcvFZC3ZAZAhNBKAjegRm6acD23fZAsZBHEjiBTLk0xsLhi1DxqCPVlRiMSu9ZARgZA8uaV0nZAzFaykuq3oQy1b5l3otpCORsyVnFxV4IrV29QoFmFNe0DXLZAgZDZD" -H "Content-Type: application/json" -d '{"messaging_product":"whatsapp","pin":"123456"}'
