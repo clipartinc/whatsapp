@@ -33,6 +33,7 @@ function getWsUrl() {
 let moltbotWs = null
 let moltbotConnected = false
 let pendingMessages = new Map()
+let pendingDiscordReplies = new Map() // sessionKey -> Discord message to reply to
 let reconnectTimer = null
 
 function connectToMoltbot() {
@@ -156,14 +157,32 @@ function connectToMoltbot() {
   }
 }
 
-function handleMoltbotEvent(event) {
-  // Handle agent text responses
-  if (event.event === 'agent' && event.payload?.text) {
-    console.log('🤖 Agent:', event.payload.text.slice(0, 100))
+async function handleMoltbotEvent(event) {
+  const sessionKey = event.payload?.sessionKey
+  
+  // Handle final chat response - send to Discord
+  if (event.event === 'chat' && event.payload?.state === 'final') {
+    const text = event.payload?.message?.content?.[0]?.text
+    if (text && sessionKey && pendingDiscordReplies.has(sessionKey)) {
+      const discordMsg = pendingDiscordReplies.get(sessionKey)
+      pendingDiscordReplies.delete(sessionKey)
+      try {
+        // Split long messages
+        const chunks = text.match(/[\s\S]{1,2000}/g) || [text]
+        for (const chunk of chunks) {
+          await discordMsg.reply(chunk)
+        }
+        console.log('✅ Replied to Discord:', text.slice(0, 50) + '...')
+      } catch (err) {
+        console.error('❌ Failed to reply to Discord:', err.message)
+      }
+    }
+    return
   }
-  // Handle chat messages
-  if (event.event === 'chat' && event.payload?.text) {
-    console.log('💬 Chat:', event.payload.text.slice(0, 100))
+  
+  // Log streaming for debugging
+  if (event.event === 'agent' && event.payload?.stream === 'assistant') {
+    // Streaming in progress
   }
 }
 
@@ -359,24 +378,25 @@ function startDiscord() {
     }
     
     try {
+      const sessionKey = `discord:${message.channel.id}`
+      
+      // Store Discord message for async reply
+      pendingDiscordReplies.set(sessionKey, message)
+      
       // Send chat message to moltbot using chat.send method
       const result = await sendToMoltbot('chat.send', {
         message: content,
-        sessionKey: `discord:${message.channel.id}`,
+        sessionKey,
         idempotencyKey: `discord:${message.id}`
       })
       
       console.log('✅ Sent to moltbot:', JSON.stringify(result || {}).slice(0, 200))
       
-      // If we get an immediate response, reply with it
-      if (result?.text) {
-        await message.reply(result.text.slice(0, 2000))
-      } else if (result?.id || result?.ok) {
-        // Message accepted, agent will process async
-        await message.react('👀')
-      }
+      // React to show message was received
+      await message.react('👀')
     } catch (err) {
       console.error('❌ Moltbot error:', err.message)
+      pendingDiscordReplies.delete(`discord:${message.channel.id}`)
       if (isAdminChannel) {
         await message.reply(`⚠️ Error: ${err.message}`)
       }
