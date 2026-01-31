@@ -43,39 +43,69 @@ function connectToMoltbot() {
   const wsUrl = getWsUrl()
   console.log(`🔌 Connecting to moltbot: ${wsUrl}`)
   
+  let connectNonce = null
+  let connectSent = false
+  
+  function sendConnect() {
+    if (connectSent || !moltbotWs) return
+    connectSent = true
+    
+    const connectMsg = {
+      jsonrpc: '2.0',
+      id: 'connect',
+      method: 'connect',
+      params: {
+        minProtocol: 1,
+        maxProtocol: 1,
+        client: {
+          id: 'discord-webhook',
+          displayName: 'Discord Bot',
+          version: '1.0.0',
+          platform: 'node',
+          mode: 'backend'
+        },
+        auth: CONFIG.moltbotPassword ? {
+          password: CONFIG.moltbotPassword
+        } : undefined,
+        role: 'operator',
+        scopes: ['operator.admin'],
+        caps: [],
+        nonce: connectNonce
+      }
+    }
+    console.log('🔐 Sending connect with password:', CONFIG.moltbotPassword ? 'yes' : 'no')
+    moltbotWs.send(JSON.stringify(connectMsg))
+  }
+  
   try {
     moltbotWs = new WebSocket(wsUrl)
     
     moltbotWs.on('open', () => {
-      console.log('✅ Connected to moltbot gateway')
-      
-      // Send connect/hello message with password authentication
-      const connectMsg = {
-        jsonrpc: '2.0',
-        id: 'connect',
-        method: 'connect',
-        params: {
-          protocol: 1,
-          clientName: 'discord-webhook',
-          clientDisplayName: 'Discord Bot',
-          clientVersion: '1.0.0',
-          mode: 'node',
-          password: CONFIG.moltbotPassword || undefined
-        }
-      }
-      console.log('🔐 Sending auth with password:', CONFIG.moltbotPassword ? 'configured' : 'none')
-      moltbotWs.send(JSON.stringify(connectMsg))
+      console.log('✅ Connected to moltbot gateway, waiting for challenge...')
     })
     
     moltbotWs.on('message', (data) => {
       try {
         const msg = JSON.parse(data.toString())
-        console.log('📨 Moltbot response:', JSON.stringify(msg).slice(0, 200))
+        console.log('📨 Moltbot:', JSON.stringify(msg).slice(0, 300))
         
-        // Handle hello/connect response
-        if (msg.id === 'connect' && msg.result) {
-          moltbotConnected = true
-          console.log('✅ Moltbot handshake complete')
+        // Handle connect.challenge event - must respond with connect request
+        if (msg.type === 'event' && msg.event === 'connect.challenge') {
+          connectNonce = msg.payload?.nonce || null
+          console.log('🔑 Received challenge, nonce:', connectNonce?.slice(0, 8) + '...')
+          sendConnect()
+          return
+        }
+        
+        // Handle connect response (JSON-RPC result)
+        if (msg.id === 'connect') {
+          if (msg.result) {
+            moltbotConnected = true
+            console.log('✅ Moltbot authenticated!', msg.result.agent?.model || '')
+          } else if (msg.error) {
+            console.error('❌ Connect failed:', msg.error.message || msg.error)
+          }
+          return
         }
         
         // Handle chat responses
@@ -86,8 +116,8 @@ function connectToMoltbot() {
         }
         
         // Handle events (agent responses)
-        if (msg.method === 'event' && msg.params) {
-          handleMoltbotEvent(msg.params)
+        if (msg.type === 'event') {
+          handleMoltbotEvent(msg)
         }
       } catch (err) {
         console.error('Error parsing moltbot message:', err)
@@ -119,9 +149,12 @@ function connectToMoltbot() {
 
 function handleMoltbotEvent(event) {
   // Handle agent text responses
-  if (event.type === 'agent.text' && event.text) {
-    console.log('🤖 Agent response:', event.text.slice(0, 100))
-    // The agent's response - we'd need to track which Discord channel to reply to
+  if (event.event === 'agent' && event.payload?.text) {
+    console.log('🤖 Agent:', event.payload.text.slice(0, 100))
+  }
+  // Handle chat messages
+  if (event.event === 'chat' && event.payload?.text) {
+    console.log('💬 Chat:', event.payload.text.slice(0, 100))
   }
 }
 
@@ -312,20 +345,21 @@ function startDiscord() {
     }
     
     try {
-      // Send chat message to moltbot
+      // Send chat message to moltbot using chat.send method
       const result = await sendToMoltbot('chat.send', {
-        message: content,
+        text: content,
         sessionKey: `discord:${message.channel.id}`,
-        deliver: false // We'll handle the reply ourselves
+        channelId: message.channel.id,
+        channelName: message.channel.name
       })
       
-      console.log('✅ Sent to moltbot:', result)
+      console.log('✅ Sent to moltbot:', JSON.stringify(result).slice(0, 200))
       
       // If we get an immediate response, reply with it
       if (result?.text) {
-        await message.reply(result.text)
-      } else if (result?.ok) {
-        // Message accepted, agent will process
+        await message.reply(result.text.slice(0, 2000))
+      } else if (result?.id || result?.ok) {
+        // Message accepted, agent will process async
         await message.react('👀')
       }
     } catch (err) {
