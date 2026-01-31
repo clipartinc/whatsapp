@@ -102,9 +102,9 @@ function connectToMoltbot() {
         if (msg.type === 'res') {
           // Handle connect response
           if (msg.id === 'connect') {
-            if (msg.result) {
+            if (msg.ok === true || msg.result) {
               moltbotConnected = true
-              console.log('✅ Moltbot authenticated!', msg.result.agent?.model || '')
+              console.log('✅ Moltbot authenticated!', msg.result?.agent?.model || 'connected')
             } else if (msg.error) {
               console.error('❌ Connect failed:', msg.error.message || msg.error.code)
             }
