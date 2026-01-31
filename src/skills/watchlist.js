@@ -3,7 +3,11 @@ import { scanOptions } from '../data/optionsScanner.js'
 // Universe of liquid options stocks to scan for opportunities
 const UNIVERSE = [
   // Major ETFs
-  'SPY', 'QQQ', 'IWM', 'DIA', 'XLF', 'XLE', 'XLK', 'GLD', 'SLV', 'TLT',
+  'SPY', 'QQQ', 'IWM', 'DIA', 'XLF', 'XLE', 'XLK', 'TLT',
+  // Precious Metals ETFs
+  'GLD', 'SLV', 'GDX', 'GDXJ', 'SIL', 'PPLT', 'PALL', 'IAU',
+  // Precious Metals Miners
+  'NEM', 'GOLD', 'FCX', 'AEM', 'KGC', 'AG',
   // Mega caps with liquid options
   'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'NVDA', 'TSLA', 'AMD', 'NFLX', 'CRM',
   // Other popular options stocks
