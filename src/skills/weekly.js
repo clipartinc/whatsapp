@@ -15,12 +15,17 @@ export async function buildWeeklyReport() {
     ''
   ]
 
+  if (top.length === 0) {
+    lines.push('⚠️ No data available. Check POLYGON_API_KEY is set.')
+    return lines.join('\n')
+  }
+
   top.forEach((r, i) => {
     lines.push(
       `${i + 1}) **${r.ticker}** — ${r.strategy}`,
       bullets([
-        `Exp: ${r.expiry} | Strike: ${r.strike}`,
-        `Mid: $${r.mid} | Delta: ${r.delta} | IV Rank: ${r.ivRank}`,
+        `Exp: ${r.expiry} | Strike: $${r.strike}`,
+        `Mid: $${r.mid} | Delta: ${r.delta} | IV: ${r.iv}%`,
         `OI: ${r.oi} | Spread: ${r.spreadPct}%`,
         `Why: ${r.why.slice(0, 2).join(' / ')}`
       ]),
@@ -29,8 +34,8 @@ export async function buildWeeklyReport() {
   })
 
   lines.push(bold('Notes'), bullets([
-    'This is placeholder data until a market data provider is wired in.',
-    'Next: add liquidity + earnings filters + real greeks.'
+    'Scans OTM options with 15-35 delta, good liquidity (OI 100+, spread <10%)',
+    'Weekly: 3-14 DTE | Daily: 20-45 DTE'
   ]))
 
   return lines.join('\n')

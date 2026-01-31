@@ -12,13 +12,17 @@ export default {
     const rows = await scanOptions({ tickers, mode: 'daily' })
     const top = rows.slice(0, 5)
 
+    if (top.length === 0) {
+      return message.reply('⚠️ No data available. Check POLYGON_API_KEY is set.')
+    }
+
     const out = [
       bold('Top Scan Results (preview)'),
       ...top.map((r, idx) => (
         `${idx + 1}) **${r.ticker}** — ${r.strategy}\n` +
         bullets([
-          `Exp: ${r.expiry} | Strike: ${r.strike}`,
-          `Mid: $${r.mid} | Delta: ${r.delta} | IV Rank: ${r.ivRank}`,
+          `Exp: ${r.expiry} | Strike: $${r.strike}`,
+          `Mid: $${r.mid} | Delta: ${r.delta} | IV: ${r.iv}%`,
           `OI: ${r.oi} | Spread: ${r.spreadPct}%`
         ])
       ))

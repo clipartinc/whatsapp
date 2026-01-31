@@ -13,12 +13,17 @@ export async function buildDailyReport() {
     ''
   ]
 
+  if (top.length === 0) {
+    lines.push('⚠️ No data available. Check POLYGON_API_KEY is set.')
+    return lines.join('\n')
+  }
+
   top.forEach((r, i) => {
     lines.push(
       `${i + 1}) **${r.ticker}** — ${r.strategy}`,
       bullets([
-        `Exp: ${r.expiry} | Strike: ${r.strike}`,
-        `Mid: $${r.mid} | Delta: ${r.delta} | IV Rank: ${r.ivRank}`,
+        `Exp: ${r.expiry} | Strike: $${r.strike}`,
+        `Mid: $${r.mid} | Delta: ${r.delta} | IV: ${r.iv}%`,
         `OI: ${r.oi} | Spread: ${r.spreadPct}%`,
         `Why: ${r.why.slice(0, 2).join(' / ')}`
       ]),
