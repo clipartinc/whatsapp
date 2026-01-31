@@ -162,7 +162,21 @@ async function handleMoltbotEvent(event) {
   
   // Handle final chat response - send to Discord
   if (event.event === 'chat' && event.payload?.state === 'final') {
-    const text = event.payload?.message?.content?.[0]?.text
+    console.log('📝 Chat final event:', JSON.stringify(event.payload?.message || {}).slice(0, 500))
+    
+    // Try multiple ways to extract text
+    let text = event.payload?.message?.content?.[0]?.text
+    if (!text && event.payload?.message?.content) {
+      // Try to find text in content array
+      const textBlock = event.payload.message.content.find(c => c.type === 'text')
+      text = textBlock?.text
+    }
+    if (!text && typeof event.payload?.message?.content === 'string') {
+      text = event.payload.message.content
+    }
+    
+    console.log('📝 Extracted text:', text ? text.slice(0, 100) + '...' : 'NONE')
+    
     if (text && sessionKey && pendingDiscordReplies.has(sessionKey)) {
       const discordMsg = pendingDiscordReplies.get(sessionKey)
       pendingDiscordReplies.delete(sessionKey)
@@ -415,7 +429,7 @@ function startDiscord() {
             await message.reply('⏱️ Response timed out. The agent may still be processing.')
           } catch {}
         }
-      }, 120000) // 2 minutes
+      }, 300000) // 5 minutes
       pendingDiscordReplies.set(sessionKey + ':timeout', typingTimeout)
       
       // Send chat message to moltbot using chat.send method
