@@ -86,6 +86,19 @@ app.get('/debug/moltbot', async (req, res) => {
     const dns = await import('dns').then(m => m.promises)
     const addresses = await dns.lookup(url.hostname)
     results.dnsLookup = { hostname: url.hostname, address: addresses.address }
+    
+    // Test 3: Try direct IPv6 connection
+    const port = url.port || 8080
+    try {
+      const ipv6Url = `http://[${addresses.address}]:${port}`
+      const controller2 = new AbortController()
+      const timeout2 = setTimeout(() => controller2.abort(), 5000)
+      const resp2 = await fetch(ipv6Url, { signal: controller2.signal })
+      clearTimeout(timeout2)
+      results.ipv6Test = { url: ipv6Url, status: resp2.status }
+    } catch (e) {
+      results.ipv6Test = { error: e.message, code: e.code, cause: e.cause?.message }
+    }
   } catch (error) {
     results.dnsLookup = { error: error.message }
   }
@@ -143,25 +156,34 @@ app.post('/webhook/post', async (req, res) => {
 })
 
 // ============================================
-// Start Express Server FIRST
+// Start Express Server FIRST (Railway health checks)
 // ============================================
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 Webhook server running on port ${PORT}`)
-  console.log(`🌐 Health check available at http://0.0.0.0:${PORT}/health`)
+  console.log(`🌐 Health check: http://0.0.0.0:${PORT}/health`)
+  
+  // Start Discord AFTER server is listening
+  startDiscord()
 })
 
 server.on('error', (err) => {
   console.error('❌ Server error:', err)
 })
 
+// Keep process alive
+setInterval(() => {
+  console.log(`💓 Heartbeat - uptime: ${Math.floor(process.uptime())}s`)
+}, 60000)
+
 // ============================================
-// Discord Bot (starts after Express)
+// Discord Bot Function
 // ============================================
-if (!CONFIG.token) {
-  console.error('❌ DISCORD_TOKEN is missing - Discord bot will not start')
-  console.error('❌ Set DISCORD_TOKEN environment variable')
-  // Don't exit - keep Express running for health checks
-} else {
+function startDiscord() {
+  if (!CONFIG.token) {
+    console.error('❌ DISCORD_TOKEN is missing - Discord bot will not start')
+    return
+  }
+  
   client = new Client({
     intents: [
       GatewayIntentBits.Guilds, 
