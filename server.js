@@ -36,6 +36,36 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy' })
 })
 
+// Debug endpoint to test moltbot connection
+app.get('/debug/moltbot', async (req, res) => {
+  const hookUrl = `${CONFIG.moltbotUrl}${CONFIG.moltbotHooksPath}/agent`
+  
+  try {
+    const response = await fetch(CONFIG.moltbotUrl, { method: 'GET' })
+    const status = response.status
+    const text = await response.text().catch(() => 'no body')
+    
+    res.json({
+      moltbotUrl: CONFIG.moltbotUrl,
+      hooksPath: CONFIG.moltbotHooksPath,
+      hookUrl,
+      tokenConfigured: !!CONFIG.moltbotHooksToken,
+      connectionTest: {
+        status,
+        body: text.slice(0, 200)
+      }
+    })
+  } catch (error) {
+    res.json({
+      moltbotUrl: CONFIG.moltbotUrl,
+      hooksPath: CONFIG.moltbotHooksPath,
+      hookUrl,
+      tokenConfigured: !!CONFIG.moltbotHooksToken,
+      error: error.message
+    })
+  }
+})
+
 // Webhook to post message to Discord channel
 app.post('/webhook/post', async (req, res) => {
   try {
@@ -154,6 +184,9 @@ client.on(Events.MessageCreate, async (message) => {
     // Use the hooks/agent endpoint to send message to moltbot
     const hookUrl = `${CONFIG.moltbotUrl}${CONFIG.moltbotHooksPath}/agent`
     
+    console.log(`📤 Forwarding to: ${hookUrl}`)
+    console.log(`📤 Token configured: ${CONFIG.moltbotHooksToken ? 'yes' : 'NO'}`)
+    
     const headers = { 'Content-Type': 'application/json' }
     if (CONFIG.moltbotHooksToken) {
       headers['Authorization'] = `Bearer ${CONFIG.moltbotHooksToken}`
@@ -174,21 +207,22 @@ client.on(Events.MessageCreate, async (message) => {
 
     if (response.ok) {
       const data = await response.json()
-      console.log('Message forwarded to moltbot:', data)
+      console.log('✅ Message forwarded to moltbot:', data)
       // The agent will respond via Discord channel directly
     } else {
       const errorText = await response.text()
-      console.error('Moltbot hook error:', response.status, errorText)
+      console.error('❌ Moltbot hook error:', response.status, errorText)
       
       if (isAdminChannel) {
-        await message.reply(`⚠️ Backend error: ${response.status}`)
+        await message.reply(`⚠️ Backend error: ${response.status} - ${errorText.slice(0, 100)}`)
       }
     }
   } catch (error) {
-    console.error('Failed to forward to moltbot:', error.message)
+    console.error('❌ Failed to forward to moltbot:', error.message)
+    console.error('❌ URL was:', `${CONFIG.moltbotUrl}${CONFIG.moltbotHooksPath}/agent`)
     
     if (isAdminChannel) {
-      await message.reply('⚠️ Backend service temporarily unavailable.')
+      await message.reply(`⚠️ Backend unavailable: ${error.message}`)
     }
   }
 })
