@@ -51,6 +51,7 @@ function connectToMoltbot() {
     connectSent = true
     
     // Moltbot uses custom frame format: type:"req", not JSON-RPC
+    // Client ID must be one of: gateway-client, cli, webchat, etc.
     const connectMsg = {
       type: 'req',
       id: 'connect',
@@ -59,10 +60,10 @@ function connectToMoltbot() {
         minProtocol: 1,
         maxProtocol: 1,
         client: {
-          id: 'discord-webhook',
+          id: 'gateway-client',
           displayName: 'Discord Bot',
           version: '1.0.0',
-          platform: 'node',
+          platform: 'linux',
           mode: 'backend'
         },
         auth: CONFIG.moltbotPassword ? {
