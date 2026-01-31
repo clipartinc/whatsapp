@@ -1,33 +1,26 @@
 import 'dotenv/config'
 import express from 'express'
 import { Client, GatewayIntentBits, Events } from 'discord.js'
-import { CONFIG } from './src/config.js'
-import { routeMessage } from './src/router.js'
-import { postToChannel } from './src/lib/discord.js'
-import { startScheduler } from './src/scheduler.js'
-
-// Skills
-import ping from './src/skills/ping.js'
-import help from './src/skills/help.js'
-import watchlist from './src/skills/watchlist.js'
-import scan from './src/skills/scan.js'
-import daily, { buildDailyReport } from './src/skills/daily.js'
-import weekly, { buildWeeklyReport } from './src/skills/weekly.js'
-import ask from './src/skills/ask.js'
-import chat from './src/skills/chat.js'
-
-const skills = [ping, help, watchlist, scan, daily, weekly, ask, chat]
 
 // ============================================
-// Express server for Railway health checks & webhooks
+// Configuration
+// ============================================
+const CONFIG = {
+  token: process.env.DISCORD_TOKEN,
+  moltbotUrl: process.env.MOLTBOT_SERVICE_URL || 'http://moltbot.railway.internal:8080',
+  adminChannel: process.env.ADMIN_CHANNEL || 'mybot-admin',
+  timezone: process.env.BOT_TZ || 'America/New_York'
+}
+
+// ============================================
+// Express Server (Health checks & webhooks)
 // ============================================
 const app = express()
 app.use(express.json())
 
 const PORT = process.env.PORT || 3000
-const MOLTBOT_URL = process.env.MOLTBOT_SERVICE_URL || 'http://moltbot:8080'
 
-// Health check endpoint (required for Railway)
+// Health check
 app.get('/', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -41,10 +34,10 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy' })
 })
 
-// Webhook endpoint to receive external triggers
+// Webhook to post message to Discord channel
 app.post('/webhook/post', async (req, res) => {
   try {
-    const { channel, message, channelId } = req.body
+    const { channel, channelId, message } = req.body
     
     if (!message) {
       return res.status(400).json({ error: 'message required' })
@@ -55,58 +48,29 @@ app.post('/webhook/post', async (req, res) => {
       return res.status(503).json({ error: 'Bot not connected to any guild' })
     }
 
-    // Post by channel name or ID
+    let ch
     if (channelId) {
-      const ch = guild.channels.cache.get(channelId)
-      if (ch) {
-        await ch.send(message)
-        return res.json({ success: true, channel: ch.name })
-      }
+      ch = guild.channels.cache.get(channelId)
     } else if (channel) {
-      await postToChannel(guild, channel, message)
-      return res.json({ success: true, channel })
+      ch = guild.channels.cache.find(c => c?.name === channel)
     }
 
-    res.status(400).json({ error: 'channel or channelId required' })
+    if (!ch || !ch.isTextBased()) {
+      return res.status(404).json({ error: 'Channel not found' })
+    }
+
+    await ch.send(message)
+    res.json({ success: true, channel: ch.name })
   } catch (error) {
     console.error('Webhook error:', error)
     res.status(500).json({ error: error.message })
   }
 })
 
-// Endpoint to trigger scheduled reports manually
-app.post('/webhook/trigger/:report', async (req, res) => {
+// Forward request to moltbot service
+app.post('/api/message', async (req, res) => {
   try {
-    const { report } = req.params
-    const guild = client.guilds.cache.first()
-    
-    if (!guild) {
-      return res.status(503).json({ error: 'Bot not connected' })
-    }
-
-    const postOptions = async (txt) => postToChannel(guild, CONFIG.channels.options, txt)
-
-    if (report === 'daily') {
-      const content = await buildDailyReport()
-      await postOptions(content)
-      return res.json({ success: true, report: 'daily' })
-    } else if (report === 'weekly') {
-      const content = await buildWeeklyReport()
-      await postOptions(content)
-      return res.json({ success: true, report: 'weekly' })
-    }
-
-    res.status(400).json({ error: 'Unknown report type. Use: daily, weekly' })
-  } catch (error) {
-    console.error('Trigger error:', error)
-    res.status(500).json({ error: error.message })
-  }
-})
-
-// Forward requests to moltbot service
-app.post('/webhook/moltbot', async (req, res) => {
-  try {
-    const response = await fetch(`${MOLTBOT_URL}/api/message`, {
+    const response = await fetch(`${CONFIG.moltbotUrl}/api/message`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(req.body)
@@ -119,21 +83,19 @@ app.post('/webhook/moltbot', async (req, res) => {
   }
 })
 
-// Endpoint to post to specific channels
-app.post('/api/channels/:channelName/messages', async (req, res) => {
+// Trigger moltbot to run a task
+app.post('/api/trigger/:task', async (req, res) => {
   try {
-    const { channelName } = req.params
-    const { content } = req.body
-
-    const guild = client.guilds.cache.first()
-    if (!guild) {
-      return res.status(503).json({ error: 'Bot not connected' })
-    }
-
-    await postToChannel(guild, channelName, content)
-    res.json({ success: true })
+    const response = await fetch(`${CONFIG.moltbotUrl}/api/trigger/${req.params.task}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    })
+    const data = await response.json()
+    res.json(data)
   } catch (error) {
-    res.status(500).json({ error: error.message })
+    console.error('Trigger error:', error)
+    res.status(502).json({ error: 'Failed to reach moltbot service' })
   }
 })
 
@@ -154,60 +116,63 @@ const client = new Client({
 })
 
 client.once(Events.ClientReady, async (c) => {
-  console.log(`🟢 moltbot online as ${c.user.tag}`)
-
+  console.log(`🟢 Discord gateway online as ${c.user.tag}`)
+  
   const guild = c.guilds.cache.first()
   if (!guild) {
     console.log('⚠️ No guild found. Invite the bot to a server.')
     return
   }
-
-  const log = async (txt) => postToChannel(guild, CONFIG.channels.logs, txt)
-  const postOptions = async (txt) => postToChannel(guild, CONFIG.channels.options, txt)
-
-  // Scheduled jobs
-  startScheduler({
-    client,
-    CONFIG,
-    log,
-    runDaily: async () => {
-      const report = await buildDailyReport()
-      await postOptions(report)
-      await log('✅ Daily report posted.')
-    },
-    runWeekly: async () => {
-      const report = await buildWeeklyReport()
-      await postOptions(report)
-      await log('✅ Weekly report posted.')
-    }
-  })
-
-  await log('🟢 moltbot is online.')
+  
+  console.log(`📡 Connected to guild: ${guild.name}`)
 })
 
+// Forward all messages to moltbot service
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return
 
-  const guild = message.guild
-  const isAdminChannel = message.channel?.name === CONFIG.channels.admin
+  const isAdminChannel = message.channel?.name === CONFIG.adminChannel
 
-  const log = async (txt) => postToChannel(guild, CONFIG.channels.logs, txt)
-  const postOptions = async (txt) => postToChannel(guild, CONFIG.channels.options, txt)
+  try {
+    // Forward to moltbot service
+    const response = await fetch(`${CONFIG.moltbotUrl}/api/discord/message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        content: message.content,
+        channelId: message.channel.id,
+        channelName: message.channel.name,
+        authorId: message.author.id,
+        authorName: message.author.username,
+        guildId: message.guild?.id,
+        isAdminChannel,
+        messageId: message.id
+      })
+    })
 
-  await routeMessage({
-    message,
-    skills,
-    ctxBase: {
-      CONFIG,
-      isAdminChannel,
-      log,
-      postOptions
+    if (response.ok) {
+      const data = await response.json()
+      
+      // If moltbot returns a reply, send it
+      if (data.reply) {
+        await message.reply(data.reply)
+      } else if (data.message) {
+        await message.channel.send(data.message)
+      }
     }
-  })
+  } catch (error) {
+    // Moltbot service unavailable - log but don't crash
+    console.error('Failed to forward to moltbot:', error.message)
+    
+    // Optional: respond with fallback if admin channel
+    if (isAdminChannel) {
+      await message.reply('⚠️ Backend service temporarily unavailable.')
+    }
+  }
 })
 
 // ============================================
-// Start everything
+// Start Everything
 // ============================================
 app.listen(PORT, () => {
   console.log(`🌐 Webhook server running on port ${PORT}`)

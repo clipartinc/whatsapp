@@ -1,18 +1,17 @@
 {
-    "name": "moltbot-discord",
-    "private": true,
-    "type": "module",
-    "scripts": {
-      "start": "node server.js"
-    },
-    "engines": {
-      "node": ">=18"
-    },
-    "dependencies": {
-      "discord.js": "^14.15.0",
-      "dotenv": "^16.4.5",
-      "express": "^4.21.0",
-      "node-cron": "^3.0.3"
-    }
+  "name": "discord-webhook",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "discord.js": "^14.15.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0"
   }
-  
+}
