@@ -361,10 +361,9 @@ function startDiscord() {
     try {
       // Send chat message to moltbot using chat.send method
       const result = await sendToMoltbot('chat.send', {
-        text: content,
+        message: content,
         sessionKey: `discord:${message.channel.id}`,
-        channelId: message.channel.id,
-        channelName: message.channel.name
+        idempotencyKey: `discord:${message.id}`
       })
       
       console.log('✅ Sent to moltbot:', JSON.stringify(result).slice(0, 200))
