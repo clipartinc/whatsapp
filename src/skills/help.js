@@ -25,10 +25,11 @@ export default {
       '🏓 **Other**',
       '`ping` - check bot is alive',
       '',
-      '💡 **Examples:**',
-      '`!ask What puts should I sell today?`',
-      '`!analyze NVDA`',
-      '`!news TSLA`'
+      '💬 **Natural Language**',
+      'Just type normally - no ! needed:',
+      '"Find puts to sell on SPY"',
+      '"What\'s the news on TSLA?"',
+      '"Calculate a $200 put at $3 premium"'
     ].join('\n'))
   }
 }

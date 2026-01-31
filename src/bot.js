@@ -14,8 +14,10 @@ import scan from './skills/scan.js'
 import daily, { buildDailyReport } from './skills/daily.js'
 import weekly, { buildWeeklyReport } from './skills/weekly.js'
 import ask from './skills/ask.js'
+import chat from './skills/chat.js'
 
-const skills = [ping, help, watchlist, scan, daily, weekly, ask]
+// Chat skill goes LAST - it's the catch-all for natural language
+const skills = [ping, help, watchlist, scan, daily, weekly, ask, chat]
 
 if (!CONFIG.token) {
   console.error('❌ DISCORD_TOKEN is missing')
