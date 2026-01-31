@@ -366,7 +366,7 @@ function startDiscord() {
         idempotencyKey: `discord:${message.id}`
       })
       
-      console.log('✅ Sent to moltbot:', JSON.stringify(result).slice(0, 200))
+      console.log('✅ Sent to moltbot:', JSON.stringify(result || {}).slice(0, 200))
       
       // If we get an immediate response, reply with it
       if (result?.text) {
