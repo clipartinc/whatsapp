@@ -174,12 +174,38 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy', discordReady, moltbotConnected })
 })
 
-app.get('/debug/moltbot', (req, res) => {
+app.get('/debug/moltbot', async (req, res) => {
+  // Test TCP connectivity
+  let tcpTest = 'not tested'
+  try {
+    const net = await import('net')
+    const url = new URL(CONFIG.moltbotUrl)
+    tcpTest = await new Promise((resolve) => {
+      const socket = net.createConnection({
+        host: url.hostname,
+        port: url.port || 8080,
+        timeout: 5000
+      })
+      socket.on('connect', () => {
+        socket.destroy()
+        resolve('connected')
+      })
+      socket.on('error', (err) => resolve(`error: ${err.message}`))
+      socket.on('timeout', () => {
+        socket.destroy()
+        resolve('timeout')
+      })
+    })
+  } catch (err) {
+    tcpTest = `exception: ${err.message}`
+  }
+  
   res.json({
     wsUrl: getWsUrl(),
     moltbotConnected,
     tokenConfigured: !!CONFIG.moltbotToken,
-    wsState: moltbotWs?.readyState
+    wsState: moltbotWs?.readyState,
+    tcpTest
   })
 })
 
