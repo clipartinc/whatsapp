@@ -1,10 +1,16 @@
 import { scanOptions } from '../data/optionsScanner.js'
 import { getWatchlist } from './watchlist.js'
+import { getScanResults } from '../scheduler.js'
 import { bullets, bold } from '../lib/format.js'
 
 export async function buildDailyReport() {
   const tickers = getWatchlist()
-  const rows = await scanOptions({ tickers, mode: 'daily' })
+  
+  // Use accumulated results if available, otherwise scan fresh
+  let rows = getScanResults()
+  if (rows.length === 0) {
+    rows = await scanOptions({ tickers, mode: 'daily' })
+  }
   const top = rows.slice(0, 10)
 
   const lines = [
