@@ -50,8 +50,9 @@ function connectToMoltbot() {
     if (connectSent || !moltbotWs) return
     connectSent = true
     
+    // Moltbot uses custom frame format: type:"req", not JSON-RPC
     const connectMsg = {
-      jsonrpc: '2.0',
+      type: 'req',
       id: 'connect',
       method: 'connect',
       params: {
@@ -69,8 +70,7 @@ function connectToMoltbot() {
         } : undefined,
         role: 'operator',
         scopes: ['operator.admin'],
-        caps: [],
-        nonce: connectNonce
+        caps: []
       }
     }
     console.log('🔐 Sending connect with password:', CONFIG.moltbotPassword ? 'yes' : 'no')
@@ -97,22 +97,30 @@ function connectToMoltbot() {
           return
         }
         
-        // Handle connect response (JSON-RPC result)
-        if (msg.id === 'connect') {
-          if (msg.result) {
-            moltbotConnected = true
-            console.log('✅ Moltbot authenticated!', msg.result.agent?.model || '')
-          } else if (msg.error) {
-            console.error('❌ Connect failed:', msg.error.message || msg.error)
+        // Handle responses (type: "res")
+        if (msg.type === 'res') {
+          // Handle connect response
+          if (msg.id === 'connect') {
+            if (msg.result) {
+              moltbotConnected = true
+              console.log('✅ Moltbot authenticated!', msg.result.agent?.model || '')
+            } else if (msg.error) {
+              console.error('❌ Connect failed:', msg.error.message || msg.error.code)
+            }
+            return
+          }
+          
+          // Handle other responses
+          if (msg.id && pendingMessages.has(msg.id)) {
+            const { resolve, reject } = pendingMessages.get(msg.id)
+            pendingMessages.delete(msg.id)
+            if (msg.error) {
+              reject(new Error(msg.error.message || msg.error.code || 'Unknown error'))
+            } else {
+              resolve(msg.result)
+            }
           }
           return
-        }
-        
-        // Handle chat responses
-        if (msg.id && pendingMessages.has(msg.id)) {
-          const { resolve } = pendingMessages.get(msg.id)
-          pendingMessages.delete(msg.id)
-          resolve(msg.result || msg.error)
         }
         
         // Handle events (agent responses)
@@ -163,9 +171,14 @@ async function sendToMoltbot(method, params) {
     throw new Error('Not connected to moltbot')
   }
   
+  if (!moltbotConnected) {
+    throw new Error('Moltbot not authenticated')
+  }
+  
   const id = randomUUID()
+  // Moltbot uses custom frame format: type:"req"
   const msg = {
-    jsonrpc: '2.0',
+    type: 'req',
     id,
     method,
     params
