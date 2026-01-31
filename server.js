@@ -4,8 +4,8 @@ import { Client, GatewayIntentBits, Events } from 'discord.js'
 const token = process.env.DISCORD_TOKEN
 if (!token) { console.error('Missing DISCORD_TOKEN'); process.exit(1) }
 
-const ADMIN_CHANNEL = process.env.ADMIN_CHANNEL || 'moltbot-admin'
-const LOGS_CHANNEL  = process.env.LOGS_CHANNEL  || 'moltbot-logs'
+const ADMIN_CHANNEL = process.env.ADMIN_CHANNEL || 'mybot-admin'
+const LOGS_CHANNEL  = process.env.LOGS_CHANNEL  || 'mybot-logs'
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]
@@ -17,7 +17,7 @@ async function logToDiscord(guild, text) {
 }
 
 client.once(Events.ClientReady, c => {
-  console.log(`🟢 moltbot online as ${c.user.tag}`)
+  console.log(`🟢 mybot online as ${c.user.tag}`)
 })
 
 client.on(Events.MessageCreate, async msg => {
@@ -46,7 +46,7 @@ client.on(Events.MessageCreate, async msg => {
 
   if (text === '!help') {
     return msg.reply([
-      '**moltbot commands (admin channel only):**',
+      '**mybot commands (admin channel only):**',
       '`!note <text>` — save a note (logs it)',
       '`!todo <text>` — add a todo (logs it)',
       '`!help` — show this help'
