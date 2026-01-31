@@ -1,12 +1,13 @@
 import 'dotenv/config'
 import express from 'express'
 import { Client, GatewayIntentBits, Events } from 'discord.js'
+import WebSocket from 'ws'
+import { randomUUID } from 'crypto'
 
-// Catch uncaught errors to prevent crash
+// Catch uncaught errors
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err)
 })
-
 process.on('unhandledRejection', (err) => {
   console.error('❌ Unhandled Rejection:', err)
 })
@@ -17,108 +18,171 @@ process.on('unhandledRejection', (err) => {
 const CONFIG = {
   token: process.env.DISCORD_TOKEN,
   moltbotUrl: process.env.MOLTBOT_INTERNAL_URL || 'http://moltbot.railway.internal:8080',
-  moltbotHooksPath: process.env.MOLTBOT_HOOKS_PATH || '/hooks',
-  moltbotHooksToken: process.env.MOLTBOT_HOOKS_TOKEN || '',
-  adminChannel: process.env.ADMIN_CHANNEL || 'mybot-admin',
-  timezone: process.env.BOT_TZ || 'America/New_York'
+  moltbotToken: process.env.MOLTBOT_HOOKS_TOKEN || '',
+  adminChannel: process.env.ADMIN_CHANNEL || 'mybot-admin'
+}
+
+// Convert HTTP URL to WebSocket URL
+function getWsUrl() {
+  return CONFIG.moltbotUrl.replace('http://', 'ws://').replace('https://', 'wss://')
 }
 
 // ============================================
-// Express Server (Health checks & webhooks)
+// Moltbot WebSocket Client
+// ============================================
+let moltbotWs = null
+let moltbotConnected = false
+let pendingMessages = new Map()
+let reconnectTimer = null
+
+function connectToMoltbot() {
+  if (moltbotWs) {
+    try { moltbotWs.close() } catch {}
+  }
+  
+  const wsUrl = getWsUrl()
+  console.log(`🔌 Connecting to moltbot: ${wsUrl}`)
+  
+  try {
+    moltbotWs = new WebSocket(wsUrl)
+    
+    moltbotWs.on('open', () => {
+      console.log('✅ Connected to moltbot gateway')
+      
+      // Send connect/hello message
+      const connectMsg = {
+        jsonrpc: '2.0',
+        id: 'connect',
+        method: 'connect',
+        params: {
+          protocol: 1,
+          clientName: 'discord-webhook',
+          clientVersion: '1.0.0',
+          mode: 'node',
+          token: CONFIG.moltbotToken || undefined
+        }
+      }
+      moltbotWs.send(JSON.stringify(connectMsg))
+    })
+    
+    moltbotWs.on('message', (data) => {
+      try {
+        const msg = JSON.parse(data.toString())
+        console.log('📨 Moltbot response:', JSON.stringify(msg).slice(0, 200))
+        
+        // Handle hello/connect response
+        if (msg.id === 'connect' && msg.result) {
+          moltbotConnected = true
+          console.log('✅ Moltbot handshake complete')
+        }
+        
+        // Handle chat responses
+        if (msg.id && pendingMessages.has(msg.id)) {
+          const { resolve } = pendingMessages.get(msg.id)
+          pendingMessages.delete(msg.id)
+          resolve(msg.result || msg.error)
+        }
+        
+        // Handle events (agent responses)
+        if (msg.method === 'event' && msg.params) {
+          handleMoltbotEvent(msg.params)
+        }
+      } catch (err) {
+        console.error('Error parsing moltbot message:', err)
+      }
+    })
+    
+    moltbotWs.on('error', (err) => {
+      console.error('❌ Moltbot WS error:', err.message)
+      moltbotConnected = false
+    })
+    
+    moltbotWs.on('close', (code, reason) => {
+      console.log(`🔌 Moltbot connection closed: ${code} - ${reason}`)
+      moltbotConnected = false
+      
+      // Reconnect after delay
+      if (!reconnectTimer) {
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null
+          connectToMoltbot()
+        }, 5000)
+      }
+    })
+  } catch (err) {
+    console.error('❌ Failed to connect to moltbot:', err.message)
+    moltbotConnected = false
+  }
+}
+
+function handleMoltbotEvent(event) {
+  // Handle agent text responses
+  if (event.type === 'agent.text' && event.text) {
+    console.log('🤖 Agent response:', event.text.slice(0, 100))
+    // The agent's response - we'd need to track which Discord channel to reply to
+  }
+}
+
+async function sendToMoltbot(method, params) {
+  if (!moltbotWs || moltbotWs.readyState !== WebSocket.OPEN) {
+    throw new Error('Not connected to moltbot')
+  }
+  
+  const id = randomUUID()
+  const msg = {
+    jsonrpc: '2.0',
+    id,
+    method,
+    params
+  }
+  
+  return new Promise((resolve, reject) => {
+    pendingMessages.set(id, { resolve, reject })
+    moltbotWs.send(JSON.stringify(msg))
+    
+    // Timeout after 30s
+    setTimeout(() => {
+      if (pendingMessages.has(id)) {
+        pendingMessages.delete(id)
+        reject(new Error('Timeout waiting for moltbot response'))
+      }
+    }, 30000)
+  })
+}
+
+// ============================================
+// Express Server
 // ============================================
 const app = express()
 app.use(express.json())
-
 const PORT = process.env.PORT || 3000
 
-// Discord client (initialized later)
-let client = null
+let discordClient = null
 let discordReady = false
 
-// Health check
 app.get('/', (req, res) => {
   res.json({ 
     status: 'ok', 
     service: 'discord-webhook',
-    bot: discordReady ? client?.user?.tag : 'connecting...',
     discordReady,
+    moltbotConnected,
     uptime: process.uptime()
   })
 })
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', discordReady })
+  res.json({ status: 'healthy', discordReady, moltbotConnected })
 })
 
-// Debug endpoint to test moltbot connection
-app.get('/debug/moltbot', async (req, res) => {
-  const hookUrl = `${CONFIG.moltbotUrl}${CONFIG.moltbotHooksPath}/agent`
-  const results = {
-    moltbotUrl: CONFIG.moltbotUrl,
-    hooksPath: CONFIG.moltbotHooksPath,
-    hookUrl,
-    tokenConfigured: !!CONFIG.moltbotHooksToken,
-    discordReady
-  }
-  
-  // Test 1: Try to reach the base URL
-  try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 5000)
-    
-    const response = await fetch(CONFIG.moltbotUrl, { 
-      method: 'GET',
-      signal: controller.signal
-    })
-    clearTimeout(timeout)
-    
-    results.baseUrlTest = {
-      status: response.status,
-      ok: response.ok
-    }
-  } catch (error) {
-    results.baseUrlTest = { error: error.message, code: error.code }
-  }
-  
-  // Test 2: Try DNS lookup
-  try {
-    const url = new URL(CONFIG.moltbotUrl)
-    const dns = await import('dns').then(m => m.promises)
-    const addresses = await dns.lookup(url.hostname)
-    results.dnsLookup = { hostname: url.hostname, address: addresses.address }
-    
-    // Test 3: Try direct IPv6 connection
-    const port = url.port || 8080
-    try {
-      const ipv6Url = `http://[${addresses.address}]:${port}`
-      const controller2 = new AbortController()
-      const timeout2 = setTimeout(() => controller2.abort(), 5000)
-      const resp2 = await fetch(ipv6Url, { signal: controller2.signal })
-      clearTimeout(timeout2)
-      results.ipv6Test = { url: ipv6Url, status: resp2.status }
-    } catch (e) {
-      results.ipv6Test = { error: e.message, code: e.code, cause: e.cause?.message }
-    }
-  } catch (error) {
-    results.dnsLookup = { error: error.message }
-  }
-  
-  res.json(results)
-})
-
-// Debug endpoint to show config
-app.get('/debug/config', (req, res) => {
+app.get('/debug/moltbot', (req, res) => {
   res.json({
-    discordTokenSet: !!CONFIG.token,
-    moltbotUrl: CONFIG.moltbotUrl,
-    hooksPath: CONFIG.moltbotHooksPath,
-    hooksTokenSet: !!CONFIG.moltbotHooksToken,
-    adminChannel: CONFIG.adminChannel,
-    discordReady
+    wsUrl: getWsUrl(),
+    moltbotConnected,
+    tokenConfigured: !!CONFIG.moltbotToken,
+    wsState: moltbotWs?.readyState
   })
 })
 
-// Webhook to post message to Discord channel
 app.post('/webhook/post', async (req, res) => {
   if (!discordReady) {
     return res.status(503).json({ error: 'Discord not ready' })
@@ -126,156 +190,125 @@ app.post('/webhook/post', async (req, res) => {
   
   try {
     const { channel, channelId, message } = req.body
-    
     if (!message) {
       return res.status(400).json({ error: 'message required' })
     }
-
-    const guild = client.guilds.cache.first()
+    
+    const guild = discordClient.guilds.cache.first()
     if (!guild) {
-      return res.status(503).json({ error: 'Bot not connected to any guild' })
+      return res.status(503).json({ error: 'No guild' })
     }
-
-    let ch
-    if (channelId) {
-      ch = guild.channels.cache.get(channelId)
-    } else if (channel) {
-      ch = guild.channels.cache.find(c => c?.name === channel)
-    }
-
-    if (!ch || !ch.isTextBased()) {
+    
+    let ch = channelId 
+      ? guild.channels.cache.get(channelId)
+      : guild.channels.cache.find(c => c?.name === channel)
+    
+    if (!ch?.isTextBased()) {
       return res.status(404).json({ error: 'Channel not found' })
     }
-
+    
     await ch.send(message)
     res.json({ success: true, channel: ch.name })
-  } catch (error) {
-    console.error('Webhook error:', error)
-    res.status(500).json({ error: error.message })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
 })
 
 // ============================================
-// Start Express Server FIRST (Railway health checks)
+// Start Express
 // ============================================
 const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🌐 Webhook server running on port ${PORT}`)
-  console.log(`🌐 Health check: http://0.0.0.0:${PORT}/health`)
-  
-  // Start Discord AFTER server is listening
+  console.log(`🌐 Server running on port ${PORT}`)
+  connectToMoltbot()
   startDiscord()
 })
 
-server.on('error', (err) => {
-  console.error('❌ Server error:', err)
-})
-
-// Keep process alive
+// Keep alive
 setInterval(() => {
-  console.log(`💓 Heartbeat - uptime: ${Math.floor(process.uptime())}s`)
+  console.log(`💓 Heartbeat - discord:${discordReady} moltbot:${moltbotConnected}`)
 }, 60000)
 
 // ============================================
-// Discord Bot Function
+// Discord Bot
 // ============================================
 function startDiscord() {
   if (!CONFIG.token) {
-    console.error('❌ DISCORD_TOKEN is missing - Discord bot will not start')
+    console.error('❌ DISCORD_TOKEN missing')
     return
   }
   
-  client = new Client({
+  discordClient = new Client({
     intents: [
-      GatewayIntentBits.Guilds, 
-      GatewayIntentBits.GuildMessages, 
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent
     ]
   })
-
-  client.once(Events.ClientReady, async (c) => {
+  
+  discordClient.once(Events.ClientReady, (c) => {
     discordReady = true
-    console.log(`🟢 Discord gateway online as ${c.user.tag}`)
-    
+    console.log(`🟢 Discord online as ${c.user.tag}`)
     const guild = c.guilds.cache.first()
-    if (!guild) {
-      console.log('⚠️ No guild found. Invite the bot to a server.')
-      return
-    }
-    
-    console.log(`📡 Connected to guild: ${guild.name}`)
+    if (guild) console.log(`📡 Guild: ${guild.name}`)
   })
-
-  client.on(Events.Error, (error) => {
-    console.error('Discord client error:', error)
+  
+  discordClient.on(Events.Error, (err) => {
+    console.error('Discord error:', err)
   })
-
-  // Forward messages to moltbot service via hooks API
-  client.on(Events.MessageCreate, async (message) => {
+  
+  discordClient.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return
-
-    const isAdminChannel = message.channel?.name === CONFIG.adminChannel
     
-    // Respond in admin channel, when mentioned, or in configured bot channels
-    const botMentioned = message.mentions.has(client.user)
+    const isAdminChannel = message.channel?.name === CONFIG.adminChannel
+    const botMentioned = message.mentions.has(discordClient.user)
     const botChannels = ['mybot-admin', 'trends', 'alerts', 'market-open', 'opportunities']
     const isBotChannel = botChannels.includes(message.channel?.name)
     
     if (!isAdminChannel && !botMentioned && !isBotChannel) return
-
-    // Remove bot mention from content if present
+    
     let content = message.content
     if (botMentioned) {
       content = content.replace(/<@!?\d+>/g, '').trim()
     }
-
     if (!content) return
-
-    try {
-      // Use the hooks/agent endpoint to send message to moltbot
-      const hookUrl = `${CONFIG.moltbotUrl}${CONFIG.moltbotHooksPath}/agent`
-      
-      console.log(`📤 Forwarding to: ${hookUrl}`)
-      console.log(`📤 Message: ${content.slice(0, 50)}...`)
-      
-      const headers = { 'Content-Type': 'application/json' }
-      if (CONFIG.moltbotHooksToken) {
-        headers['Authorization'] = `Bearer ${CONFIG.moltbotHooksToken}`
-      }
-
-      const response = await fetch(hookUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          message: content,
-          name: message.author.username,
-          wakeMode: 'now',
-          deliver: true,
-          channel: 'discord',
-          to: message.channel.id
-        })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        console.log('✅ Message forwarded to moltbot:', data)
-      } else {
-        const errorText = await response.text()
-        console.error('❌ Moltbot hook error:', response.status, errorText)
-        
-        if (isAdminChannel) {
-          await message.reply(`⚠️ Backend error: ${response.status} - ${errorText.slice(0, 100)}`)
-        }
-      }
-    } catch (error) {
-      console.error('❌ Failed to forward to moltbot:', error.message)
-      
+    
+    console.log(`📤 User message: ${content.slice(0, 50)}...`)
+    
+    // Check moltbot connection
+    if (!moltbotConnected) {
       if (isAdminChannel) {
-        await message.reply(`⚠️ Backend unavailable: ${error.message}`)
+        await message.reply('⚠️ Backend not connected. Reconnecting...')
+      }
+      connectToMoltbot()
+      return
+    }
+    
+    try {
+      // Send chat message to moltbot
+      const result = await sendToMoltbot('chat.send', {
+        message: content,
+        sessionKey: `discord:${message.channel.id}`,
+        deliver: false // We'll handle the reply ourselves
+      })
+      
+      console.log('✅ Sent to moltbot:', result)
+      
+      // If we get an immediate response, reply with it
+      if (result?.text) {
+        await message.reply(result.text)
+      } else if (result?.ok) {
+        // Message accepted, agent will process
+        await message.react('👀')
+      }
+    } catch (err) {
+      console.error('❌ Moltbot error:', err.message)
+      if (isAdminChannel) {
+        await message.reply(`⚠️ Error: ${err.message}`)
       }
     }
   })
-
-  client.login(CONFIG.token).catch(err => {
+  
+  discordClient.login(CONFIG.token).catch(err => {
     console.error('❌ Discord login failed:', err.message)
   })
 }
