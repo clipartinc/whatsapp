@@ -7,7 +7,7 @@ import { Client, GatewayIntentBits, Events } from 'discord.js'
 // ============================================
 const CONFIG = {
   token: process.env.DISCORD_TOKEN,
-  moltbotUrl: process.env.MOLTBOT_SERVICE_URL || 'http://moltbot.railway.internal:8080',
+  moltbotUrl: process.env.MOLTBOT_INTERNAL_URL || 'http://moltbot.railway.internal:8080',
   adminChannel: process.env.ADMIN_CHANNEL || 'mybot-admin',
   timezone: process.env.BOT_TZ || 'America/New_York'
 }
