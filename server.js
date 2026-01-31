@@ -355,7 +355,7 @@ function startDiscord() {
     
     const isAdminChannel = message.channel?.name === CONFIG.adminChannel
     const botMentioned = message.mentions.has(discordClient.user)
-    const botChannels = ['mybot-admin', 'trends', 'alerts', 'market-open', 'opportunities']
+    const botChannels = ['mybot-admin', 'trends', 'alerts', 'market-open', 'opportunities', 'mybot-options']
     const isBotChannel = botChannels.includes(message.channel?.name)
     
     if (!isAdminChannel && !botMentioned && !isBotChannel) return
