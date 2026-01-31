@@ -17,8 +17,8 @@ process.on('unhandledRejection', (err) => {
 // ============================================
 const CONFIG = {
   token: process.env.DISCORD_TOKEN,
-  moltbotUrl: process.env.MOLTBOT_INTERNAL_URL || 'http://moltbot.railway.internal:8080',
-  moltbotToken: process.env.MOLTBOT_HOOKS_TOKEN || '',
+  moltbotUrl: process.env.MOLTBOT_URL || process.env.MOLTBOT_INTERNAL_URL || 'http://moltbot.railway.internal:8080',
+  moltbotPassword: process.env.MOLTBOT_GATEWAY_PASSWORD || process.env.MOLTBOT_HOOKS_TOKEN || '',
   adminChannel: process.env.ADMIN_CHANNEL || 'mybot-admin'
 }
 
@@ -49,7 +49,7 @@ function connectToMoltbot() {
     moltbotWs.on('open', () => {
       console.log('✅ Connected to moltbot gateway')
       
-      // Send connect/hello message
+      // Send connect/hello message with password authentication
       const connectMsg = {
         jsonrpc: '2.0',
         id: 'connect',
@@ -57,11 +57,13 @@ function connectToMoltbot() {
         params: {
           protocol: 1,
           clientName: 'discord-webhook',
+          clientDisplayName: 'Discord Bot',
           clientVersion: '1.0.0',
           mode: 'node',
-          token: CONFIG.moltbotToken || undefined
+          password: CONFIG.moltbotPassword || undefined
         }
       }
+      console.log('🔐 Sending auth with password:', CONFIG.moltbotPassword ? 'configured' : 'none')
       moltbotWs.send(JSON.stringify(connectMsg))
     })
     
@@ -203,7 +205,7 @@ app.get('/debug/moltbot', async (req, res) => {
   res.json({
     wsUrl: getWsUrl(),
     moltbotConnected,
-    tokenConfigured: !!CONFIG.moltbotToken,
+    passwordConfigured: !!CONFIG.moltbotPassword,
     wsState: moltbotWs?.readyState,
     tcpTest
   })
