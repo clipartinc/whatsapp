@@ -1,6 +1,6 @@
 import cron from 'node-cron'
 import { scanOptions } from './data/optionsScanner.js'
-import { getWatchlist } from './skills/watchlist.js'
+import { getWatchlist, setWatchlist, getUniverse } from './skills/watchlist.js'
 
 // Store accumulated scan results
 const scanState = {
@@ -16,6 +16,53 @@ export function getScanResults() {
 export function clearScanResults() {
   scanState.results = []
   scanState.currentIndex = 0
+}
+
+// Auto-rebuild watchlist from universe
+async function autoRebuildWatchlist(log, limit = 15) {
+  const universe = getUniverse()
+  const allResults = []
+  const batchSize = 4
+
+  await log('🔄 Auto-rebuilding watchlist from universe...')
+
+  for (let i = 0; i < universe.length; i += batchSize) {
+    const batch = universe.slice(i, i + batchSize)
+
+    try {
+      const results = await scanOptions({ tickers: batch, mode: 'daily' })
+      allResults.push(...results)
+    } catch (err) {
+      console.error(`Error scanning batch:`, err.message)
+    }
+
+    // Rate limit: wait between batches
+    if (i + batchSize < universe.length) {
+      await new Promise(r => setTimeout(r, 15000))
+    }
+  }
+
+  // Group by ticker and get best score per ticker
+  const tickerScores = {}
+  for (const r of allResults) {
+    if (!tickerScores[r.ticker] || r.score > tickerScores[r.ticker].score) {
+      tickerScores[r.ticker] = r
+    }
+  }
+
+  // Sort by score and take top N
+  const ranked = Object.values(tickerScores)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+
+  const newWatchlist = ranked.map(r => r.ticker)
+  
+  if (newWatchlist.length > 0) {
+    setWatchlist(newWatchlist)
+    await log(`✅ Watchlist updated: ${newWatchlist.join(', ')}`)
+  } else {
+    await log('⚠️ No opportunities found, keeping existing watchlist')
+  }
 }
 
 export function startScheduler({ client, CONFIG, runDaily, runWeekly, log }) {
@@ -63,6 +110,16 @@ export function startScheduler({ client, CONFIG, runDaily, runWeekly, log }) {
       console.error('Batch scan error:', err.message)
     } finally {
       scanState.isScanning = false
+    }
+  }, { timezone: CONFIG.timezone })
+
+  // Auto-rebuild watchlist daily at 7:30am Mon-Fri (before scanning starts)
+  cron.schedule('30 7 * * 1-5', async () => {
+    try {
+      await autoRebuildWatchlist(log, 15)
+    } catch (err) {
+      console.error('Watchlist rebuild error:', err)
+      await log(`❌ Watchlist rebuild failed: ${err.message}`)
     }
   }, { timezone: CONFIG.timezone })
 
