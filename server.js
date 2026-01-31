@@ -67,7 +67,7 @@ function connectToMoltbot() {
           mode: 'backend'
         },
         auth: CONFIG.moltbotPassword ? {
-          password: CONFIG.moltbotPassword
+          token: CONFIG.moltbotPassword
         } : undefined,
         role: 'operator',
         scopes: ['operator.admin'],
