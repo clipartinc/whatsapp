@@ -57,8 +57,8 @@ function connectToMoltbot() {
       id: 'connect',
       method: 'connect',
       params: {
-        minProtocol: 1,
-        maxProtocol: 1,
+        minProtocol: 3,
+        maxProtocol: 3,
         client: {
           id: 'gateway-client',
           displayName: 'Discord Bot',
