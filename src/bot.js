@@ -13,8 +13,9 @@ import watchlist from './skills/watchlist.js'
 import scan from './skills/scan.js'
 import daily, { buildDailyReport } from './skills/daily.js'
 import weekly, { buildWeeklyReport } from './skills/weekly.js'
+import ask from './skills/ask.js'
 
-const skills = [ping, help, watchlist, scan, daily, weekly]
+const skills = [ping, help, watchlist, scan, daily, weekly, ask]
 
 if (!CONFIG.token) {
   console.error('❌ DISCORD_TOKEN is missing')

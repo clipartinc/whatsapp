@@ -296,6 +296,17 @@ app.get('/api/stats', (req, res) => {
   })
 })
 
+app.get('/api/status', (req, res) => {
+  res.json({
+    polygonConfigured: !!process.env.POLYGON_API_KEY,
+    aiConfigured: !!process.env.OPENAI_API_KEY,
+    dashboardProtected: !!process.env.DASHBOARD_PASSWORD,
+    watchlistSize: getWatchlist().length,
+    opportunitiesFound: getScanResults().length,
+    uptime: process.uptime()
+  })
+})
+
 export function startDashboard() {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`📊 Dashboard running at http://localhost:${PORT}`)

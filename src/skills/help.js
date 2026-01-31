@@ -9,7 +9,7 @@ export default {
       '`!watchlist` - show current watchlist',
       '`!watchlist add TSLA,NVDA` - add tickers',
       '`!watchlist remove TSLA` - remove tickers',
-      '`!watchlist auto [N]` - auto-build top N from 40+ stocks',
+      '`!watchlist auto [N]` - auto-build top N from 50+ stocks',
       '`!watchlist universe` - show scannable stocks',
       '',
       '🔎 **Scanning**',
@@ -17,8 +17,18 @@ export default {
       '`!daily` - post daily report to #moltbot-options',
       '`!weekly` - post weekly report to #moltbot-options',
       '',
+      '🤖 **AI Features**',
+      '`!ask <question>` - ask AI about trading',
+      '`!analyze TICKER` - AI analysis with news',
+      '`!news [TICKER]` - get news (ticker or watchlist)',
+      '',
       '🏓 **Other**',
-      '`ping` - check bot is alive'
+      '`ping` - check bot is alive',
+      '',
+      '💡 **Examples:**',
+      '`!ask What puts should I sell today?`',
+      '`!analyze NVDA`',
+      '`!news TSLA`'
     ].join('\n'))
   }
 }
