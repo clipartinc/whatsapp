@@ -4,6 +4,7 @@ import { CONFIG } from './config.js'
 import { routeMessage } from './router.js'
 import { postToChannel } from './lib/discord.js'
 import { startScheduler } from './scheduler.js'
+import { startDashboard } from './dashboard.js'
 
 // Skills
 import ping from './skills/ping.js'
@@ -79,3 +80,6 @@ client.on(Events.MessageCreate, async (message) => {
 })
 
 client.login(CONFIG.token)
+
+// Start the web dashboard
+startDashboard()
