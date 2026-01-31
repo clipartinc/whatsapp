@@ -167,11 +167,16 @@ async function handleMoltbotEvent(event) {
       const discordMsg = pendingDiscordReplies.get(sessionKey)
       pendingDiscordReplies.delete(sessionKey)
       
-      // Clear typing indicator
+      // Clear typing indicator and timeout
       const typingInterval = pendingDiscordReplies.get(sessionKey + ':typing')
       if (typingInterval) {
         clearInterval(typingInterval)
         pendingDiscordReplies.delete(sessionKey + ':typing')
+      }
+      const typingTimeout = pendingDiscordReplies.get(sessionKey + ':timeout')
+      if (typingTimeout) {
+        clearTimeout(typingTimeout)
+        pendingDiscordReplies.delete(sessionKey + ':timeout')
       }
       
       try {
@@ -400,6 +405,19 @@ function startDiscord() {
       // Store interval so we can clear it later
       pendingDiscordReplies.set(sessionKey + ':typing', typingInterval)
       
+      // Timeout after 2 minutes - stop typing and notify
+      const typingTimeout = setTimeout(async () => {
+        if (pendingDiscordReplies.has(sessionKey)) {
+          clearInterval(typingInterval)
+          pendingDiscordReplies.delete(sessionKey + ':typing')
+          pendingDiscordReplies.delete(sessionKey)
+          try {
+            await message.reply('⏱️ Response timed out. The agent may still be processing.')
+          } catch {}
+        }
+      }, 120000) // 2 minutes
+      pendingDiscordReplies.set(sessionKey + ':timeout', typingTimeout)
+      
       // Send chat message to moltbot using chat.send method
       const result = await sendToMoltbot('chat.send', {
         message: content,
@@ -412,11 +430,16 @@ function startDiscord() {
       console.error('❌ Moltbot error:', err.message)
       const sessionKey = `discord:${message.channel.id}`
       
-      // Clear typing indicator on error
+      // Clear typing indicator and timeout on error
       const typingInterval = pendingDiscordReplies.get(sessionKey + ':typing')
       if (typingInterval) {
         clearInterval(typingInterval)
         pendingDiscordReplies.delete(sessionKey + ':typing')
+      }
+      const typingTimeout = pendingDiscordReplies.get(sessionKey + ':timeout')
+      if (typingTimeout) {
+        clearTimeout(typingTimeout)
+        pendingDiscordReplies.delete(sessionKey + ':timeout')
       }
       pendingDiscordReplies.delete(sessionKey)
       
