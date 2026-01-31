@@ -2,6 +2,15 @@ import 'dotenv/config'
 import express from 'express'
 import { Client, GatewayIntentBits, Events } from 'discord.js'
 
+// Catch uncaught errors to prevent crash
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err)
+})
+
+process.on('unhandledRejection', (err) => {
+  console.error('❌ Unhandled Rejection:', err)
+})
+
 // ============================================
 // Configuration
 // ============================================
@@ -44,7 +53,15 @@ app.get('/health', (req, res) => {
 // Debug endpoint to test moltbot connection
 app.get('/debug/moltbot', async (req, res) => {
   const hookUrl = `${CONFIG.moltbotUrl}${CONFIG.moltbotHooksPath}/agent`
+  const results = {
+    moltbotUrl: CONFIG.moltbotUrl,
+    hooksPath: CONFIG.moltbotHooksPath,
+    hookUrl,
+    tokenConfigured: !!CONFIG.moltbotHooksToken,
+    discordReady
+  }
   
+  // Test 1: Try to reach the base URL
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 5000)
@@ -55,30 +72,25 @@ app.get('/debug/moltbot', async (req, res) => {
     })
     clearTimeout(timeout)
     
-    const status = response.status
-    const text = await response.text().catch(() => 'no body')
-    
-    res.json({
-      moltbotUrl: CONFIG.moltbotUrl,
-      hooksPath: CONFIG.moltbotHooksPath,
-      hookUrl,
-      tokenConfigured: !!CONFIG.moltbotHooksToken,
-      discordReady,
-      connectionTest: {
-        status,
-        body: text.slice(0, 200)
-      }
-    })
+    results.baseUrlTest = {
+      status: response.status,
+      ok: response.ok
+    }
   } catch (error) {
-    res.json({
-      moltbotUrl: CONFIG.moltbotUrl,
-      hooksPath: CONFIG.moltbotHooksPath,
-      hookUrl,
-      tokenConfigured: !!CONFIG.moltbotHooksToken,
-      discordReady,
-      error: error.message
-    })
+    results.baseUrlTest = { error: error.message, code: error.code }
   }
+  
+  // Test 2: Try DNS lookup
+  try {
+    const url = new URL(CONFIG.moltbotUrl)
+    const dns = await import('dns').then(m => m.promises)
+    const addresses = await dns.lookup(url.hostname)
+    results.dnsLookup = { hostname: url.hostname, address: addresses.address }
+  } catch (error) {
+    results.dnsLookup = { error: error.message }
+  }
+  
+  res.json(results)
 })
 
 // Debug endpoint to show config
@@ -133,8 +145,13 @@ app.post('/webhook/post', async (req, res) => {
 // ============================================
 // Start Express Server FIRST
 // ============================================
-app.listen(PORT, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 Webhook server running on port ${PORT}`)
+  console.log(`🌐 Health check available at http://0.0.0.0:${PORT}/health`)
+})
+
+server.on('error', (err) => {
+  console.error('❌ Server error:', err)
 })
 
 // ============================================
