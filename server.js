@@ -166,6 +166,14 @@ async function handleMoltbotEvent(event) {
     if (text && sessionKey && pendingDiscordReplies.has(sessionKey)) {
       const discordMsg = pendingDiscordReplies.get(sessionKey)
       pendingDiscordReplies.delete(sessionKey)
+      
+      // Clear typing indicator
+      const typingInterval = pendingDiscordReplies.get(sessionKey + ':typing')
+      if (typingInterval) {
+        clearInterval(typingInterval)
+        pendingDiscordReplies.delete(sessionKey + ':typing')
+      }
+      
       try {
         // Split long messages
         const chunks = text.match(/[\s\S]{1,2000}/g) || [text]
@@ -383,6 +391,15 @@ function startDiscord() {
       // Store Discord message for async reply
       pendingDiscordReplies.set(sessionKey, message)
       
+      // Show typing indicator while processing
+      await message.channel.sendTyping()
+      const typingInterval = setInterval(() => {
+        message.channel.sendTyping().catch(() => {})
+      }, 8000) // Discord typing lasts ~10s, refresh every 8s
+      
+      // Store interval so we can clear it later
+      pendingDiscordReplies.set(sessionKey + ':typing', typingInterval)
+      
       // Send chat message to moltbot using chat.send method
       const result = await sendToMoltbot('chat.send', {
         message: content,
@@ -391,13 +408,19 @@ function startDiscord() {
       })
       
       console.log('✅ Sent to moltbot:', JSON.stringify(result || {}).slice(0, 200))
-      
-      // React to show message was received
-      await message.react('👀')
     } catch (err) {
       console.error('❌ Moltbot error:', err.message)
-      pendingDiscordReplies.delete(`discord:${message.channel.id}`)
-      if (isAdminChannel) {
+      const sessionKey = `discord:${message.channel.id}`
+      
+      // Clear typing indicator on error
+      const typingInterval = pendingDiscordReplies.get(sessionKey + ':typing')
+      if (typingInterval) {
+        clearInterval(typingInterval)
+        pendingDiscordReplies.delete(sessionKey + ':typing')
+      }
+      pendingDiscordReplies.delete(sessionKey)
+      
+      if (isAdminChannel || isBotChannel) {
         await message.reply(`⚠️ Error: ${err.message}`)
       }
     }
