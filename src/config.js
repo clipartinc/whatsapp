@@ -12,8 +12,8 @@ export const CONFIG = {
   
     // Schedule defaults
     schedule: {
-      daily: process.env.DAILY_CRON || '30 7 * * 1-5',   // 7:30am Mon–Fri
-      weekly: process.env.WEEKLY_CRON || '00 9 * * 6'    // 9:00am Saturday
+      daily: process.env.DAILY_CRON || '0 9 * * 1-5',    // 9:00am Mon–Fri
+      weekly: process.env.WEEKLY_CRON || '0 9 * * 6'     // 9:00am Saturday
     }
   }
   
